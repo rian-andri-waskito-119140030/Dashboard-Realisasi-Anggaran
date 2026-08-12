@@ -213,11 +213,11 @@ if n_cats_main > 0:
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=-0.2,
+            y=1.02,
             xanchor="center",
             x=0.5
         ),
-        margin=dict(l=40, r=40, t=40, b=120)
+        margin=dict(l=40, r=40, t=70, b=130)
     )
 
     fig_main.update_yaxes(
@@ -225,7 +225,7 @@ if n_cats_main > 0:
         tickformat=",.0f",
         separatethousands=True
     )
-    fig_main.update_xaxes(tickfont=dict(size=9))
+    fig_main.update_xaxes(tickfont=dict(size=9), automargin=True)
 
     pd_st.plotly_chart(fig_main, use_container_width=True)
 else:
