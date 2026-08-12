@@ -9,6 +9,19 @@ import os
 pd_st.set_page_config(page_title="Dashboard Realisasi Anggaran", layout="wide")
 
 # ==========================================
+# CSS TAMBAHAN AGAR TABEL BISA DI-SCROLL DI HP
+# ==========================================
+pd_st.markdown("""
+    <style>
+    /* Memastikan tabel responsif dan bisa digeser horizontal di layar kecil */
+    [data-testid="stDataFrame"] {
+        width: 100%;
+        overflow-x: auto;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# ==========================================
 # 1. KONFIGURASI KATEGORI & WARNA
 # ==========================================
 CATEGORIES_MAPPING = {
@@ -118,7 +131,7 @@ def load_data():
 df_all = load_data()
 
 # ==========================================
-# 3. TAMPILAN DASHBOARD STREAMLIT (RESPONSIF)
+# 3. TAMPILAN DASHBOARD STREAMLIT
 # ==========================================
 pd_st.title("📊 Dashboard Realisasi Anggaran")
 pd_st.markdown("Dinas Komunikasi dan Informatika")
@@ -151,16 +164,15 @@ fig_main = px.line(
 fig_main.update_layout(
     template="plotly_white",
     hovermode="closest",
-    # Legenda ditaruh di bawah dengan ukuran font yang aman untuk layar HP
     legend=dict(
         orientation="h",
         yanchor="top",
-        y=-0.2,
+        y=-0.25,
         xanchor="center",
         x=0.5,
         font=dict(size=10)
     ),
-    margin=dict(l=10, r=10, t=20, b=150),
+    margin=dict(l=10, r=10, t=20, b=160),
     autosize=True
 )
 
@@ -169,19 +181,16 @@ fig_main.update_traces(
 )
 
 fig_main.update_yaxes(tickprefix="Rp ", tickformat=",.0f", separatethousands=True)
-
-# use_container_width=True membuat grafik otomatis menyesuaikan lebar layar HP / Laptop
 pd_st.plotly_chart(fig_main, use_container_width=True)
 
 # ------------------------------------------
-# 5. GRAFIK DETAIL PER BIDANG (RESPONSIF 1 KOLOM DI HP)
+# 5. GRAFIK DETAIL PER BIDANG (1 KOLOM DI HP)
 # ------------------------------------------
 pd_st.subheader("🔍 RAK vs Realisasi per Bidang")
 pd_st.markdown("🟢 Melebihi | 🟡 Mendekati (80-100%) | 🔴 Di Bawah (<80%)")
 
 n_cats = len(selected_categories)
 if n_cats > 0:
-    # Menggunakan 1 kolom penuh agar di HP tidak berhimpit/terpotong
     fig = make_subplots(
         rows=n_cats, cols=1, 
         subplot_titles=selected_categories,
@@ -196,7 +205,6 @@ if n_cats > 0:
         rak_strs = df_cat["RAK_Str"].tolist()
         lra_strs = df_cat["Realisasi_Str"].tolist()
         
-        # Plot RAK
         fig.add_trace(
             go.Scatter(
                 x=x_vals, y=rak_vals,
@@ -212,7 +220,6 @@ if n_cats > 0:
             row=idx, col=1
         )
         
-        # Plot Realisasi
         colors = []
         for r_val, l_val in zip(rak_vals, lra_vals):
             if l_val > r_val: colors.append('#188038')
@@ -235,11 +242,9 @@ if n_cats > 0:
         )
 
     fig.update_layout(
-        height=250 * n_cats, # Tinggi menyesuaikan jumlah bidang
+        height=260 * n_cats,
         template="plotly_white",
         hovermode="closest",
-        margin=dict(l=10, r=10, t=30, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     
     fig.update_yaxes(tickprefix="Rp ", tickformat=",.0f", separatethousands=True)
@@ -248,7 +253,7 @@ else:
     pd_st.warning("Silakan pilih minimal satu bidang di sidebar.")
 
 # ------------------------------------------
-# 6. TABEL RANGKUMAN (BISA DIGESER / SCROLL DI HP)
+# 6. TABEL RANGKUMAN (BEBAS DIGESER DI HP)
 # ------------------------------------------
 with pd_st.expander("📁 Lihat Tabel Rangkuman RAK vs Realisasi"):
     df_filtered = df_all[df_all["Bidang"].isin(selected_categories)]
@@ -269,7 +274,7 @@ with pd_st.expander("📁 Lihat Tabel Rangkuman RAK vs Realisasi"):
             
         df_display = df_pivot.map(format_accounting)
         
-        # Menggunakan st.dataframe tanpa hide/lock berlebihan agar komponen scroll bawaan HP aktif secara leluasa
-        pd_st.dataframe(df_display, use_container_width=True, height=300)
+        # st.dataframe akan otomatis mendeteksi lebar layar dan membuka fitur scroll horizontal
+        pd_st.dataframe(df_display, use_container_width=True)
     else:
         pd_st.warning("Belum ada bidang yang dipilih.")
