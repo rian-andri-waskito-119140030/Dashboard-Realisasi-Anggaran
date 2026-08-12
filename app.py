@@ -139,9 +139,9 @@ selected_categories = pd_st.sidebar.multiselect(
 df_filtered = df_all[df_all["Bidang"].isin(selected_categories)]
 
 # ------------------------------------------
-# 4. GRAFIK UTAMA — SATU GRAFIK BATANG, DIKELOMPOKKAN PER BULAN (SEMUA BIDANG DULU, BARU BULAN BERIKUTNYA)
+# 4. GRAFIK UTAMA — SATU GRAFIK BATANG, TETAP DIPISAH PER BIDANG (Jan-Jul)
 # ------------------------------------------
-pd_st.subheader("📈 Perbandingan RAK vs Realisasi per Bulan & Bidang (Satu Grafik)")
+pd_st.subheader("📈 Perbandingan RAK vs Realisasi per Bidang, Januari–Juli (Satu Grafik)")
 
 # Ubah ke format panjang (long format): RAK & Realisasi jadi satu kolom "Tipe"
 df_long = df_filtered.melt(
@@ -151,10 +151,8 @@ df_long = df_filtered.melt(
     value_name="Nilai"
 )
 df_long["Bulan"] = pd.Categorical(df_long["Bulan"], categories=MONTHS_FULL, ordered=True)
-df_long["Bidang"] = pd.Categorical(df_long["Bidang"], categories=selected_categories, ordered=True)
-df_long = df_long.sort_values(["Bulan", "Bidang"])
 
-# Label pendek di dalam batang (contoh: 350jt / 1,55M) agar tidak terlalu panjang
+# Label pendek di dalam batang (contoh: 350 Jt / 1,55 M) agar tidak terlalu panjang
 def format_short(v):
     if v <= 0:
         return ""
@@ -170,30 +168,34 @@ df_long["Nilai_Str"] = df_long["Nilai"].apply(
 df_long["Nilai_Short"] = df_long["Nilai"].apply(format_short)
 
 n_cats_main = len(selected_categories)
+facet_wrap = 3 if n_cats_main > 2 else n_cats_main if n_cats_main > 0 else 1
 
 if n_cats_main > 0:
-    # x bertingkat: Bulan (level luar) -> Bidang (level dalam)
-    # sehingga Januari akan menampilkan semua bidang dulu, baru pindah ke Februari, dst.
     fig_main = px.bar(
         df_long,
-        x=["Bulan", "Bidang"],
+        x="Bulan",
         y="Nilai",
         color="Tipe",
         barmode="group",
-        category_orders={"Bulan": MONTHS_FULL, "Bidang": selected_categories},
+        facet_col="Bidang",
+        facet_col_wrap=facet_wrap,
+        category_orders={"Bulan": MONTHS_FULL},
         color_discrete_map={
             "RAK (Rencana)": RAK_COLOR,
             "Realisasi (Aktual)": REALISASI_COLOR
         },
-        custom_data=["Nilai_Str", "Tipe", "Bidang"],
+        custom_data=["Nilai_Str", "Tipe"],
         text="Nilai_Short"
     )
 
+    # Bersihkan judul facet agar hanya menampilkan nama Bidang
+    fig_main.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+
     fig_main.update_traces(
-        hovertemplate="<b>%{customdata[1]}</b><br>Bidang: %{customdata[2]}<br>Nilai: %{customdata[0]}<extra></extra>",
+        hovertemplate="<b>%{customdata[1]}</b><br>Bulan: %{x}<br>Nilai: %{customdata[0]}<extra></extra>",
         textposition="inside",
         textangle=-90,
-        textfont=dict(size=9, color="white"),
+        textfont=dict(size=8, color="white"),
         insidetextanchor="middle"
     )
 
@@ -203,22 +205,21 @@ if n_cats_main > 0:
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=-0.25,
+            y=-0.15,
             xanchor="center",
             x=0.5
         ),
-        margin=dict(l=40, r=40, t=40, b=100),
-        height=600,
-        bargap=0.15,
-        bargroupgap=0.05
+        margin=dict(l=40, r=40, t=40, b=80),
+        height=350 * ((n_cats_main + facet_wrap - 1) // facet_wrap)
     )
 
     fig_main.update_yaxes(
         tickprefix="Rp ",
         tickformat=",.0f",
-        separatethousands=True
+        separatethousands=True,
+        matches=None
     )
-    fig_main.update_xaxes(tickfont=dict(size=10))
+    fig_main.update_xaxes(matches=None)
 
     pd_st.plotly_chart(fig_main, use_container_width=True)
 else:
