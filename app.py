@@ -19,7 +19,7 @@ pd_st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 1. KONFIGURASI KATEGORI (DIKEMBALIKAN KE 6 BIDANG UTAMA)
+# 1. KONFIGURASI 6 KATEGORI UTAMA & WARNA
 # ==========================================
 CATEGORIES_MAPPING = {
     "Program Penunjang Urusan Pemerintahan Daerah Kab/Kota": [
@@ -46,6 +46,15 @@ CATEGORIES_MAPPING = {
     "Urusan Pemerintahan Bidang Persandian": [
         "urusan pemerintahan bidang persandian"
     ]
+}
+
+CATEGORY_COLORS = {
+    "Program Penunjang Urusan Pemerintahan Daerah Kab/Kota": "#1A73E8", 
+    "Informasi Publik": "#188038",                                      
+    "Komunikasi Publik": "#F9AB00",                                     
+    "Program Pengelolaan Aplikasi Informatika": "#00ACC1",              
+    "Urusan Pemerintahan Bidang Statistik": "#D93025",                  
+    "Urusan Pemerintahan Bidang Persandian": "#9334E6"                  
 }
 
 MONTHS_FILE = ["januari", "februari", "maret", "april", "mei", "juni", "juli"]
@@ -150,7 +159,7 @@ selected_categories = pd_st.sidebar.multiselect(
 )
 
 selected_months = pd_st.sidebar.multiselect(
-    "Pilih Bulan (Untuk Grafik Akumulasi):",
+    "Pilih Bulan:",
     options=MONTHS_FULL,
     default=MONTHS_FULL
 )
@@ -161,7 +170,6 @@ df_filtered = df_all[(df_all["Bidang"].isin(selected_categories)) & (df_all["Bul
 # 4A. GRAFIK UTAMA 1 (TOTAL PER BULAN)
 # ------------------------------------------
 pd_st.subheader("📈 Total Keseluruhan per Bulan (RAK vs Realisasi)")
-pd_st.markdown("Melihat pergerakan total RAK dan Realisasi dari seluruh bidang yang dipilih setiap bulannya.")
 
 if not df_filtered.empty:
     df_agg_bulan = df_filtered.groupby("Bulan", sort=False)[["RAK (Rencana)", "Realisasi (Aktual)"]].sum().reset_index()
@@ -200,10 +208,10 @@ if not df_filtered.empty:
     pd_st.plotly_chart(fig_bulan, use_container_width=True)
 
 # ------------------------------------------
-# 4B. GRAFIK UTAMA 2 (TOTAL PER BIDANG)
+# 4B. GRAFIK UTAMA 2 (TOTAL PER BIDANG - MENGETAHUI YANG RENDAH)
 # ------------------------------------------
 pd_st.subheader("📉 Akumulasi Total per Bidang (RAK vs Realisasi)")
-pd_st.markdown("Melihat perbandingan kinerja serapan anggaran antar bidang secara langsung untuk mengetahui **bidang mana yang realisasinya paling tertinggal**.")
+pd_st.markdown("Menyoroti bidang mana yang realisasinya paling tertinggal.")
 
 if not df_filtered.empty:
     df_agg_bidang = df_filtered.groupby("Bidang", sort=False)[["RAK (Rencana)", "Realisasi (Aktual)"]].sum().reset_index()
@@ -248,8 +256,7 @@ pd_st.subheader("🔍 Detail RAK vs Realisasi per Bidang")
 
 n_cats = len(selected_categories)
 if n_cats > 0:
-    # Filter ulang khusus untuk subplot agar selalu menampilkan urutan bulan dengan rapi
-    df_detail = df_all[df_all["Bidang"].isin(selected_categories)]
+    df_detail = df_all[(df_all["Bidang"].isin(selected_categories)) & (df_all["Bulan"].isin(selected_months))]
     
     fig = make_subplots(
         rows=n_cats, cols=1, 
@@ -265,7 +272,7 @@ if n_cats > 0:
         rak_strs = df_cat["RAK_Str"].tolist()
         lra_strs = df_cat["Realisasi_Str"].tolist()
         
-        # Batang RAK
+        # Batang RAK (Biru)
         fig.add_trace(
             go.Bar(
                 x=x_vals, y=rak_vals,
@@ -281,7 +288,7 @@ if n_cats > 0:
             row=idx, col=1
         )
         
-        # Batang Realisasi
+        # Batang Realisasi (Merah)
         fig.add_trace(
             go.Bar(
                 x=x_vals, y=lra_vals,
@@ -315,7 +322,6 @@ else:
 # 6. TABEL RANGKUMAN 
 # ------------------------------------------
 with pd_st.expander("📁 Lihat Tabel Rangkuman RAK vs Realisasi"):
-    # Tabel dirangkum menggunakan seluruh bulan (tidak dipotong filter bulan agar tabel utuh)
     df_tabel = df_all[df_all["Bidang"].isin(selected_categories)]
     if not df_tabel.empty:
         df_pivot = df_tabel.pivot(index="Bidang", columns="Bulan", values=["RAK (Rencana)", "Realisasi (Aktual)"])
