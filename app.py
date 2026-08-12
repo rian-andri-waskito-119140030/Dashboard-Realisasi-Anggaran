@@ -48,15 +48,6 @@ CATEGORIES_MAPPING = {
     ]
 }
 
-CATEGORY_COLORS = {
-    "Program Penunjang Urusan Pemerintahan Daerah Kab/Kota": "#1A73E8", 
-    "Informasi Publik": "#188038",                                      
-    "Komunikasi Publik": "#F9AB00",                                     
-    "Program Pengelolaan Aplikasi Informatika": "#00ACC1",              
-    "Urusan Pemerintahan Bidang Statistik": "#D93025",                  
-    "Urusan Pemerintahan Bidang Persandian": "#9334E6"                  
-}
-
 MONTHS_FILE = ["januari", "februari", "maret", "april", "mei", "juni", "juli"]
 MONTHS_FULL = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli"]
 MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul"]
@@ -72,6 +63,17 @@ def clean_number(val):
         return float(val_str)
     except ValueError:
         return 0.0
+
+# Fungsi untuk menyingkat angka di dalam batang grafik agar rapi
+def format_short_label(val):
+    if val == 0:
+        return ""
+    elif val >= 1_000_000_000:
+        return f"{val / 1_000_000_000:.1f} M".replace('.', ',')
+    elif val >= 1_000_000:
+        return f"{val / 1_000_000:,.0f} Jt".replace(',', '.')
+    else:
+        return f"{val:,.0f}".replace(',', '.')
 
 @pd_st.cache_data
 def load_data():
@@ -143,48 +145,60 @@ selected_categories = pd_st.sidebar.multiselect(
 df_filtered = df_all[df_all["Bidang"].isin(selected_categories)]
 
 # ------------------------------------------
-# 4. GRAFIK UTAMA GABUNGAN
+# 4. GRAFIK UTAMA (AGGREGAT KESELURUHAN)
 # ------------------------------------------
-pd_st.subheader("📈 Tren Realisasi Aktual")
+pd_st.subheader("📈 Total Keseluruhan (RAK vs Realisasi)")
 
-fig_main = px.line(
-    df_filtered,
-    x="Bulan",
-    y="Realisasi (Aktual)",
-    color="Bidang",
-    markers=True,
-    color_discrete_map=CATEGORY_COLORS,
-    category_orders={"Bulan": MONTHS_FULL},
-    custom_data=["Realisasi_Str", "Bidang", "Bulan"]
-)
+if not df_filtered.empty:
+    # Agregasi data (Total) berdasarkan bulan
+    df_agg = df_filtered.groupby("Bulan", sort=False)[["RAK (Rencana)", "Realisasi (Aktual)"]].sum().reset_index()
+    
+    fig_main = go.Figure()
+    
+    # Batang RAK (Biru)
+    fig_main.add_trace(go.Bar(
+        x=df_agg["Bulan"],
+        y=df_agg["RAK (Rencana)"],
+        name="RAK (Rencana)",
+        marker_color="#1A73E8",
+        text=[format_short_label(v) for v in df_agg["RAK (Rencana)"]],
+        textposition="auto",
+        hovertemplate="Bulan: %{x}<br>RAK: Rp %{y:,.0f}<extra></extra>".replace(",", ".")
+    ))
+    
+    # Batang Realisasi (Merah)
+    fig_main.add_trace(go.Bar(
+        x=df_agg["Bulan"],
+        y=df_agg["Realisasi (Aktual)"],
+        name="Realisasi (Aktual)",
+        marker_color="#D93025",
+        text=[format_short_label(v) for v in df_agg["Realisasi (Aktual)"]],
+        textposition="auto",
+        hovertemplate="Bulan: %{x}<br>Realisasi: Rp %{y:,.0f}<extra></extra>".replace(",", ".")
+    ))
 
-fig_main.update_layout(
-    template="plotly_white",
-    hovermode="closest",
-    legend=dict(
-        orientation="h",
-        yanchor="top",
-        y=-0.25,
-        xanchor="center",
-        x=0.5,
-        font=dict(size=10)
-    ),
-    margin=dict(l=10, r=10, t=20, b=160),
-    autosize=True
-)
+    fig_main.update_layout(
+        barmode='group',
+        template="plotly_white",
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.15,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=11)
+        ),
+        margin=dict(l=10, r=10, t=20, b=80),
+        autosize=True
+    )
 
-fig_main.update_traces(
-    hovertemplate="<b>%{customdata[1]}</b><br>Bulan: %{customdata[2]}<br>Realisasi: %{customdata[0]}<extra></extra>"
-)
-
-fig_main.update_yaxes(tickprefix="Rp ", tickformat=",.0f", separatethousands=True)
-pd_st.plotly_chart(fig_main, use_container_width=True)
+    fig_main.update_yaxes(tickprefix="Rp ", tickformat=",.0f", separatethousands=True)
+    pd_st.plotly_chart(fig_main, use_container_width=True)
 
 # ------------------------------------------
 # 5. GRAFIK DETAIL PER BIDANG
 # ------------------------------------------
 pd_st.subheader("🔍 RAK vs Realisasi per Bidang")
-pd_st.markdown("🟢 Melebihi | 🟡 Mendekati (80-100%) | 🔴 Di Bawah (<80%)")
 
 n_cats = len(selected_categories)
 if n_cats > 0:
@@ -202,13 +216,14 @@ if n_cats > 0:
         rak_strs = df_cat["RAK_Str"].tolist()
         lra_strs = df_cat["Realisasi_Str"].tolist()
         
+        # Batang RAK (Biru)
         fig.add_trace(
-            go.Scatter(
+            go.Bar(
                 x=x_vals, y=rak_vals,
-                mode='lines+markers',
                 name='RAK',
-                line=dict(color='#1A73E8', width=2),
-                marker=dict(size=5),
+                marker_color='#1A73E8', # Warna Biru
+                text=[format_short_label(v) for v in rak_vals],
+                textposition='auto',
                 legendgroup='rak',
                 showlegend=(idx == 1),
                 customdata=rak_strs,
@@ -217,19 +232,14 @@ if n_cats > 0:
             row=idx, col=1
         )
         
-        colors = []
-        for r_val, l_val in zip(rak_vals, lra_vals):
-            if l_val > r_val: colors.append('#188038')
-            elif l_val >= 0.8 * r_val: colors.append('#F9AB00')
-            else: colors.append('#D93025')
-                
+        # Batang Realisasi (Merah)
         fig.add_trace(
-            go.Scatter(
+            go.Bar(
                 x=x_vals, y=lra_vals,
-                mode='lines+markers',
                 name='Realisasi',
-                line=dict(color='#BDC1C6', width=1.5),
-                marker=dict(size=7, color=colors),
+                marker_color='#D93025', # Warna Merah
+                text=[format_short_label(v) for v in lra_vals],
+                textposition='auto',
                 legendgroup='lra',
                 showlegend=(idx == 1),
                 customdata=lra_strs,
@@ -239,9 +249,17 @@ if n_cats > 0:
         )
 
     fig.update_layout(
-        height=260 * n_cats,
+        barmode='group', # Mengubah batang menjadi berdampingan
+        height=300 * n_cats,
         template="plotly_white",
         hovermode="closest",
+        legend=dict(
+            orientation="h", 
+            yanchor="bottom", 
+            y=1.02, 
+            xanchor="right", 
+            x=1
+        )
     )
     
     fig.update_yaxes(tickprefix="Rp ", tickformat=",.0f", separatethousands=True)
@@ -250,7 +268,7 @@ else:
     pd_st.warning("Silakan pilih minimal satu bidang di sidebar.")
 
 # ------------------------------------------
-# 6. TABEL RANGKUMAN (AMAN TANPA MULTI-INDEX ERROR)
+# 6. TABEL RANGKUMAN 
 # ------------------------------------------
 with pd_st.expander("📁 Lihat Tabel Rangkuman RAK vs Realisasi"):
     df_filtered = df_all[df_all["Bidang"].isin(selected_categories)]
