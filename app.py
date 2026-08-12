@@ -139,9 +139,9 @@ selected_categories = pd_st.sidebar.multiselect(
 df_filtered = df_all[df_all["Bidang"].isin(selected_categories)]
 
 # ------------------------------------------
-# 4. GRAFIK UTAMA — SATU GRAFIK BATANG, TETAP DIPISAH PER BIDANG (Jan-Jul)
+# 4. GRAFIK UTAMA — SATU GRAFIK BATANG, DIKELOMPOKKAN PER BULAN (SEMUA BIDANG DULU, BARU BULAN BERIKUTNYA)
 # ------------------------------------------
-pd_st.subheader("📈 Perbandingan RAK vs Realisasi per Bidang, Januari–Juli (Satu Grafik)")
+pd_st.subheader("📈 Perbandingan RAK vs Realisasi per Bulan & Bidang (Satu Grafik)")
 
 # Ubah ke format panjang (long format): RAK & Realisasi jadi satu kolom "Tipe"
 df_long = df_filtered.melt(
@@ -151,35 +151,50 @@ df_long = df_filtered.melt(
     value_name="Nilai"
 )
 df_long["Bulan"] = pd.Categorical(df_long["Bulan"], categories=MONTHS_FULL, ordered=True)
+df_long["Bidang"] = pd.Categorical(df_long["Bidang"], categories=selected_categories, ordered=True)
+df_long = df_long.sort_values(["Bulan", "Bidang"])
+
+# Label pendek di dalam batang (contoh: 350jt / 1,55M) agar tidak terlalu panjang
+def format_short(v):
+    if v <= 0:
+        return ""
+    if v >= 1_000_000_000:
+        return f"{v/1_000_000_000:,.2f}".replace(",", "#").replace(".", ",").replace("#", ".") + " M"
+    if v >= 1_000_000:
+        return f"{v/1_000_000:,.0f}".replace(",", ".") + " Jt"
+    return f"{v:,.0f}".replace(",", ".")
+
 df_long["Nilai_Str"] = df_long["Nilai"].apply(
     lambda v: f"Rp {v:,.0f}".replace(",", ".") if v > 0 else "Rp 0"
 )
+df_long["Nilai_Short"] = df_long["Nilai"].apply(format_short)
 
 n_cats_main = len(selected_categories)
-facet_wrap = 3 if n_cats_main > 2 else n_cats_main if n_cats_main > 0 else 1
 
 if n_cats_main > 0:
+    # x bertingkat: Bulan (level luar) -> Bidang (level dalam)
+    # sehingga Januari akan menampilkan semua bidang dulu, baru pindah ke Februari, dst.
     fig_main = px.bar(
         df_long,
-        x="Bulan",
+        x=["Bulan", "Bidang"],
         y="Nilai",
         color="Tipe",
         barmode="group",
-        facet_col="Bidang",
-        facet_col_wrap=facet_wrap,
-        category_orders={"Bulan": MONTHS_FULL},
+        category_orders={"Bulan": MONTHS_FULL, "Bidang": selected_categories},
         color_discrete_map={
             "RAK (Rencana)": RAK_COLOR,
             "Realisasi (Aktual)": REALISASI_COLOR
         },
-        custom_data=["Nilai_Str", "Tipe"]
+        custom_data=["Nilai_Str", "Tipe", "Bidang"],
+        text="Nilai_Short"
     )
 
-    # Bersihkan judul facet agar hanya menampilkan nama Bidang
-    fig_main.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
-
     fig_main.update_traces(
-        hovertemplate="<b>%{customdata[1]}</b><br>Bulan: %{x}<br>Nilai: %{customdata[0]}<extra></extra>"
+        hovertemplate="<b>%{customdata[1]}</b><br>Bidang: %{customdata[2]}<br>Nilai: %{customdata[0]}<extra></extra>",
+        textposition="inside",
+        textangle=-90,
+        textfont=dict(size=9, color="white"),
+        insidetextanchor="middle"
     )
 
     fig_main.update_layout(
@@ -188,21 +203,22 @@ if n_cats_main > 0:
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=-0.15,
+            y=-0.25,
             xanchor="center",
             x=0.5
         ),
-        margin=dict(l=40, r=40, t=40, b=80),
-        height=350 * ((n_cats_main + facet_wrap - 1) // facet_wrap)
+        margin=dict(l=40, r=40, t=40, b=100),
+        height=600,
+        bargap=0.15,
+        bargroupgap=0.05
     )
 
     fig_main.update_yaxes(
         tickprefix="Rp ",
         tickformat=",.0f",
-        separatethousands=True,
-        matches=None
+        separatethousands=True
     )
-    fig_main.update_xaxes(matches=None)
+    fig_main.update_xaxes(tickfont=dict(size=10))
 
     pd_st.plotly_chart(fig_main, use_container_width=True)
 else:
@@ -235,6 +251,9 @@ if n_cats > 0:
         rak_strs = df_cat["RAK_Str"].tolist()
         lra_strs = df_cat["Realisasi_Str"].tolist()
         
+        rak_short = [format_short(v) for v in rak_vals]
+        lra_short = [format_short(v) for v in lra_vals]
+
         # 1. Batang RAK (Biru)
         fig.add_trace(
             go.Bar(
@@ -244,7 +263,12 @@ if n_cats > 0:
                 legendgroup='rak',
                 showlegend=(idx == 0),
                 customdata=rak_strs,
-                hovertemplate="RAK: %{customdata}<extra></extra>"
+                hovertemplate="RAK: %{customdata}<extra></extra>",
+                text=rak_short,
+                textposition="inside",
+                textangle=-90,
+                textfont=dict(size=8, color="white"),
+                insidetextanchor="middle"
             ),
             row=r, col=c
         )
@@ -258,7 +282,12 @@ if n_cats > 0:
                 legendgroup='lra',
                 showlegend=(idx == 0),
                 customdata=lra_strs,
-                hovertemplate="Realisasi: %{customdata}<extra></extra>"
+                hovertemplate="Realisasi: %{customdata}<extra></extra>",
+                text=lra_short,
+                textposition="inside",
+                textangle=-90,
+                textfont=dict(size=8, color="white"),
+                insidetextanchor="middle"
             ),
             row=r, col=c
         )
