@@ -22,8 +22,23 @@ pd_st.markdown("""
 # 1. KONFIGURASI KATEGORI & WARNA
 # ==========================================
 CATEGORIES_MAPPING = {
-    "Program Penunjang Urusan Pemerintahan Daerah Kab/Kota": [
-        "program penunjang urusan pemerintahan daerah kabupaten/kota"
+    "Perencanaan, Penganggaran, & Evaluasi": [
+        "perencanaan, penganggaran, dan evaluasi kinerja perangkat daerah"
+    ],
+    "Administrasi Keuangan": [
+        "administrasi keuangan perangkat daerah"
+    ],
+    "Administrasi Umum": [
+        "administrasi umum perangkat daerah"
+    ],
+    "Pengadaan Barang Milik Daerah": [
+        "pengadaan barang milik daerah penunjang urusan pemerintah daerah"
+    ],
+    "Penyediaan Jasa Penunjang": [
+        "penyediaan jasa penunjang urusan pemerintahan daerah"
+    ],
+    "Pemeliharaan Barang Milik Daerah": [
+        "pemeliharaan barang milik daerah penunjang urusan pemerintahan daerah"
     ],
     "Informasi Publik": [
         "relasi media",
@@ -56,12 +71,16 @@ MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul"]
 # 2. FUNGSI PENGOLAHAN DATA
 # ==========================================
 def clean_number(val):
-    if pd.isna(val): return 0.0
-    if isinstance(val, (int, float)): return float(val)
-    val_str = str(val).replace('.', '').replace(',', '.') 
     try:
+        if pd.isna(val) or val is None or val == "" or str(val).strip() == "-": 
+            return 0.0
+        if isinstance(val, (int, float)): 
+            return float(val)
+            
+        val_str = str(val).strip().replace('Rp', '').replace(' ', '')
+        val_str = val_str.replace('.', '').replace(',', '.') 
         return float(val_str)
-    except ValueError:
+    except Exception:
         return 0.0
 
 # Fungsi untuk menyingkat angka di dalam batang grafik agar rapi
@@ -89,7 +108,7 @@ def load_data():
             for m in MONTHS_FILE:
                 col_name = m.capitalize()
                 if col_name in rows.columns:
-                    rak_result[cat_name][m] = rows[col_name].apply(clean_number).sum()
+                    rak_result[cat_name][m] = rows[col_name].apply(clean_number).astype(float).sum()
                     
     # 2. Load LRA
     lra_result = {cat: {m: 0.0 for m in MONTHS_FILE} for cat in CATEGORIES_MAPPING}
@@ -100,17 +119,19 @@ def load_data():
             df_lra['Uraian'] = df_lra['Unnamed: 4'].astype(str).str.strip().str.lower()
             for cat_name, keywords in CATEGORIES_MAPPING.items():
                 rows = df_lra[df_lra['Uraian'].isin(keywords)]
-                op = rows['Unnamed: 6'].apply(clean_number).sum()
-                mod = rows['Unnamed: 8'].apply(clean_number).sum()
-                lra_result[cat_name][m] = op + mod
+                
+                op = rows['Unnamed: 6'].apply(clean_number).astype(float).sum()
+                mod = rows['Unnamed: 8'].apply(clean_number).astype(float).sum()
+                
+                lra_result[cat_name][m] = float(op) + float(mod)
                 
     # 3. Bentuk Dataframe Panjang
     records = []
     for cat in CATEGORIES_MAPPING.keys():
         for i, m_file in enumerate(MONTHS_FILE):
             m_name = MONTHS_FULL[i]
-            rak_val = rak_result[cat][m_file]
-            lra_val = lra_result[cat][m_file]
+            rak_val = float(rak_result[cat][m_file])
+            lra_val = float(lra_result[cat][m_file])
             
             rak_str = f"Rp {rak_val:,.0f}".replace(",", ".") if rak_val > 0 else "Rp 0"
             lra_str = f"Rp {lra_val:,.0f}".replace(",", ".") if lra_val > 0 else "Rp 0"
@@ -137,7 +158,7 @@ pd_st.markdown("Dinas Komunikasi dan Informatika")
 
 # Sidebar Filter Pilihan Bidang
 selected_categories = pd_st.sidebar.multiselect(
-    "Pilih Bidang:",
+    "Pilih Bidang / Sub Kegiatan:",
     options=list(CATEGORIES_MAPPING.keys()),
     default=list(CATEGORIES_MAPPING.keys())
 )
@@ -145,36 +166,37 @@ selected_categories = pd_st.sidebar.multiselect(
 df_filtered = df_all[df_all["Bidang"].isin(selected_categories)]
 
 # ------------------------------------------
-# 4. GRAFIK UTAMA (AGGREGAT KESELURUHAN)
+# 4. GRAFIK UTAMA (PERBANDINGAN KINERJA SEMUA BIDANG)
 # ------------------------------------------
-pd_st.subheader("📈 Total Keseluruhan (RAK vs Realisasi)")
+pd_st.subheader("📈 Total RAK vs Realisasi Keseluruhan per Bidang")
+pd_st.markdown("Grafik ini merangkum total anggaran dari seluruh bulan yang dipilih untuk menyoroti **bidang mana yang realisasinya tertinggal**.")
 
 if not df_filtered.empty:
-    # Agregasi data (Total) berdasarkan bulan
-    df_agg = df_filtered.groupby("Bulan", sort=False)[["RAK (Rencana)", "Realisasi (Aktual)"]].sum().reset_index()
+    # Agregasi data (Total) berdasarkan *Bidang* (bukan bulan lagi)
+    df_agg = df_filtered.groupby("Bidang", sort=False)[["RAK (Rencana)", "Realisasi (Aktual)"]].sum().reset_index()
     
     fig_main = go.Figure()
     
     # Batang RAK (Biru)
     fig_main.add_trace(go.Bar(
-        x=df_agg["Bulan"],
+        x=df_agg["Bidang"],
         y=df_agg["RAK (Rencana)"],
-        name="RAK (Rencana)",
+        name="Total RAK (Rencana)",
         marker_color="#1A73E8",
         text=[format_short_label(v) for v in df_agg["RAK (Rencana)"]],
         textposition="auto",
-        hovertemplate="Bulan: %{x}<br>RAK: Rp %{y:,.0f}<extra></extra>".replace(",", ".")
+        hovertemplate="Bidang: %{x}<br>Total RAK: Rp %{y:,.0f}<extra></extra>".replace(",", ".")
     ))
     
     # Batang Realisasi (Merah)
     fig_main.add_trace(go.Bar(
-        x=df_agg["Bulan"],
+        x=df_agg["Bidang"],
         y=df_agg["Realisasi (Aktual)"],
-        name="Realisasi (Aktual)",
+        name="Total Realisasi (Aktual)",
         marker_color="#D93025",
         text=[format_short_label(v) for v in df_agg["Realisasi (Aktual)"]],
         textposition="auto",
-        hovertemplate="Bulan: %{x}<br>Realisasi: Rp %{y:,.0f}<extra></extra>".replace(",", ".")
+        hovertemplate="Bidang: %{x}<br>Total Realisasi: Rp %{y:,.0f}<extra></extra>".replace(",", ".")
     ))
 
     fig_main.update_layout(
@@ -183,12 +205,12 @@ if not df_filtered.empty:
         legend=dict(
             orientation="h",
             yanchor="top",
-            y=-0.15,
+            y=-0.5,  # Diatur lebih turun agar tidak bertabrakan dengan label teks yang panjang
             xanchor="center",
             x=0.5,
             font=dict(size=11)
         ),
-        margin=dict(l=10, r=10, t=20, b=80),
+        margin=dict(l=10, r=10, t=20, b=120),
         autosize=True
     )
 
@@ -196,16 +218,16 @@ if not df_filtered.empty:
     pd_st.plotly_chart(fig_main, use_container_width=True)
 
 # ------------------------------------------
-# 5. GRAFIK DETAIL PER BIDANG
+# 5. GRAFIK DETAIL BULANAN PER BIDANG
 # ------------------------------------------
-pd_st.subheader("🔍 RAK vs Realisasi per Bidang")
+pd_st.subheader("🔍 Tren Bulanan RAK vs Realisasi per Bidang")
 
 n_cats = len(selected_categories)
 if n_cats > 0:
     fig = make_subplots(
         rows=n_cats, cols=1, 
         subplot_titles=selected_categories,
-        vertical_spacing=0.08
+        vertical_spacing=0.04
     )
     
     for idx, cat in enumerate(selected_categories, start=1):
@@ -221,7 +243,7 @@ if n_cats > 0:
             go.Bar(
                 x=x_vals, y=rak_vals,
                 name='RAK',
-                marker_color='#1A73E8', # Warna Biru
+                marker_color='#1A73E8', 
                 text=[format_short_label(v) for v in rak_vals],
                 textposition='auto',
                 legendgroup='rak',
@@ -237,7 +259,7 @@ if n_cats > 0:
             go.Bar(
                 x=x_vals, y=lra_vals,
                 name='Realisasi',
-                marker_color='#D93025', # Warna Merah
+                marker_color='#D93025', 
                 text=[format_short_label(v) for v in lra_vals],
                 textposition='auto',
                 legendgroup='lra',
@@ -249,7 +271,7 @@ if n_cats > 0:
         )
 
     fig.update_layout(
-        barmode='group', # Mengubah batang menjadi berdampingan
+        barmode='group', 
         height=300 * n_cats,
         template="plotly_white",
         hovermode="closest",
@@ -259,7 +281,8 @@ if n_cats > 0:
             y=1.02, 
             xanchor="right", 
             x=1
-        )
+        ),
+        margin=dict(l=10, r=10, t=40, b=20)
     )
     
     fig.update_yaxes(tickprefix="Rp ", tickformat=",.0f", separatethousands=True)
@@ -282,7 +305,6 @@ with pd_st.expander("📁 Lihat Tabel Rangkuman RAK vs Realisasi"):
             
         df_pivot = df_pivot[new_columns]
         
-        # Flatten MultiIndex columns agar aman dari error pemformatan
         df_pivot.columns = [f"{col[0]} - {col[1]}" for col in df_pivot.columns]
         df_pivot = df_pivot.reset_index()
         
