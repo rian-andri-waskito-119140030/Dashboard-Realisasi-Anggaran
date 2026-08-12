@@ -139,66 +139,74 @@ selected_categories = pd_st.sidebar.multiselect(
 df_filtered = df_all[df_all["Bidang"].isin(selected_categories)]
 
 # ------------------------------------------
-# 4. GRAFIK UTAMA GABUNGAN — GRAFIK BATANG RAK vs REALISASI
+# 4. GRAFIK UTAMA — SATU GRAFIK BATANG, TETAP DIPISAH PER BIDANG (Jan-Jul)
 # ------------------------------------------
-pd_st.subheader("📈 Perbandingan RAK vs Realisasi per Bulan (Grafik Batang, Semua Bidang Digabung)")
+pd_st.subheader("📈 Perbandingan RAK vs Realisasi per Bidang, Januari–Juli (Satu Grafik)")
 
-# Agregasi total RAK & Realisasi per bulan (gabungan seluruh bidang terpilih)
-df_bulanan = (
-    df_filtered.groupby(["Bulan", "Bulan_Short"], as_index=False)[["RAK (Rencana)", "Realisasi (Aktual)"]]
-    .sum()
+# Ubah ke format panjang (long format): RAK & Realisasi jadi satu kolom "Tipe"
+df_long = df_filtered.melt(
+    id_vars=["Bidang", "Bulan"],
+    value_vars=["RAK (Rencana)", "Realisasi (Aktual)"],
+    var_name="Tipe",
+    value_name="Nilai"
 )
-df_bulanan["Bulan"] = pd.Categorical(df_bulanan["Bulan"], categories=MONTHS_FULL, ordered=True)
-df_bulanan = df_bulanan.sort_values("Bulan")
-
-df_bulanan["RAK_Str"] = df_bulanan["RAK (Rencana)"].apply(
-    lambda v: f"Rp {v:,.0f}".replace(",", ".") if v > 0 else "Rp 0"
-)
-df_bulanan["Realisasi_Str"] = df_bulanan["Realisasi (Aktual)"].apply(
+df_long["Bulan"] = pd.Categorical(df_long["Bulan"], categories=MONTHS_FULL, ordered=True)
+df_long["Nilai_Str"] = df_long["Nilai"].apply(
     lambda v: f"Rp {v:,.0f}".replace(",", ".") if v > 0 else "Rp 0"
 )
 
-fig_main = go.Figure()
+n_cats_main = len(selected_categories)
+facet_wrap = 3 if n_cats_main > 2 else n_cats_main if n_cats_main > 0 else 1
 
-fig_main.add_trace(go.Bar(
-    x=df_bulanan["Bulan"],
-    y=df_bulanan["RAK (Rencana)"],
-    name="RAK (Rencana)",
-    marker_color=RAK_COLOR,
-    customdata=df_bulanan["RAK_Str"],
-    hovertemplate="<b>RAK (Rencana)</b><br>Bulan: %{x}<br>Nilai: %{customdata}<extra></extra>"
-))
+if n_cats_main > 0:
+    fig_main = px.bar(
+        df_long,
+        x="Bulan",
+        y="Nilai",
+        color="Tipe",
+        barmode="group",
+        facet_col="Bidang",
+        facet_col_wrap=facet_wrap,
+        category_orders={"Bulan": MONTHS_FULL},
+        color_discrete_map={
+            "RAK (Rencana)": RAK_COLOR,
+            "Realisasi (Aktual)": REALISASI_COLOR
+        },
+        custom_data=["Nilai_Str", "Tipe"]
+    )
 
-fig_main.add_trace(go.Bar(
-    x=df_bulanan["Bulan"],
-    y=df_bulanan["Realisasi (Aktual)"],
-    name="Realisasi (Aktual)",
-    marker_color=REALISASI_COLOR,
-    customdata=df_bulanan["Realisasi_Str"],
-    hovertemplate="<b>Realisasi (Aktual)</b><br>Bulan: %{x}<br>Nilai: %{customdata}<extra></extra>"
-))
+    # Bersihkan judul facet agar hanya menampilkan nama Bidang
+    fig_main.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
 
-fig_main.update_layout(
-    barmode="group",
-    template="plotly_white",
-    hovermode="closest",
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=-0.3,
-        xanchor="center",
-        x=0.5
-    ),
-    margin=dict(l=40, r=40, t=20, b=80)
-)
+    fig_main.update_traces(
+        hovertemplate="<b>%{customdata[1]}</b><br>Bulan: %{x}<br>Nilai: %{customdata[0]}<extra></extra>"
+    )
 
-fig_main.update_yaxes(
-    tickprefix="Rp ",
-    tickformat=",.0f",
-    separatethousands=True
-)
+    fig_main.update_layout(
+        template="plotly_white",
+        hovermode="closest",
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.15,
+            xanchor="center",
+            x=0.5
+        ),
+        margin=dict(l=40, r=40, t=40, b=80),
+        height=350 * ((n_cats_main + facet_wrap - 1) // facet_wrap)
+    )
 
-pd_st.plotly_chart(fig_main, use_container_width=True)
+    fig_main.update_yaxes(
+        tickprefix="Rp ",
+        tickformat=",.0f",
+        separatethousands=True,
+        matches=None
+    )
+    fig_main.update_xaxes(matches=None)
+
+    pd_st.plotly_chart(fig_main, use_container_width=True)
+else:
+    pd_st.warning("Silakan pilih minimal satu bidang di sidebar.")
 
 # ------------------------------------------
 # 5. GRAFIK DETAIL PER BIDANG — GRAFIK BATANG (GRID 3x2)
