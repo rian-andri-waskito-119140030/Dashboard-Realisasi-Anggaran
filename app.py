@@ -19,26 +19,11 @@ pd_st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 1. KONFIGURASI KATEGORI & WARNA
+# 1. KONFIGURASI KATEGORI (DIKEMBALIKAN KE 6 BIDANG UTAMA)
 # ==========================================
 CATEGORIES_MAPPING = {
-    "Perencanaan, Penganggaran, & Evaluasi": [
-        "perencanaan, penganggaran, dan evaluasi kinerja perangkat daerah"
-    ],
-    "Administrasi Keuangan": [
-        "administrasi keuangan perangkat daerah"
-    ],
-    "Administrasi Umum": [
-        "administrasi umum perangkat daerah"
-    ],
-    "Pengadaan Barang Milik Daerah": [
-        "pengadaan barang milik daerah penunjang urusan pemerintah daerah"
-    ],
-    "Penyediaan Jasa Penunjang": [
-        "penyediaan jasa penunjang urusan pemerintahan daerah"
-    ],
-    "Pemeliharaan Barang Milik Daerah": [
-        "pemeliharaan barang milik daerah penunjang urusan pemerintahan daerah"
+    "Program Penunjang Urusan Pemerintahan Daerah Kab/Kota": [
+        "program penunjang urusan pemerintahan daerah kabupaten/kota"
     ],
     "Informasi Publik": [
         "relasi media",
@@ -156,89 +141,131 @@ df_all = load_data()
 pd_st.title("📊 Dashboard Realisasi Anggaran")
 pd_st.markdown("Dinas Komunikasi dan Informatika")
 
-# Sidebar Filter Pilihan Bidang
+# Sidebar Filter Pilihan Bidang & Bulan
+pd_st.sidebar.header("Filter Data")
 selected_categories = pd_st.sidebar.multiselect(
-    "Pilih Bidang / Sub Kegiatan:",
+    "Pilih Bidang:",
     options=list(CATEGORIES_MAPPING.keys()),
     default=list(CATEGORIES_MAPPING.keys())
 )
 
-df_filtered = df_all[df_all["Bidang"].isin(selected_categories)]
+selected_months = pd_st.sidebar.multiselect(
+    "Pilih Bulan (Untuk Grafik Akumulasi):",
+    options=MONTHS_FULL,
+    default=MONTHS_FULL
+)
+
+df_filtered = df_all[(df_all["Bidang"].isin(selected_categories)) & (df_all["Bulan"].isin(selected_months))]
 
 # ------------------------------------------
-# 4. GRAFIK UTAMA (PERBANDINGAN KINERJA SEMUA BIDANG)
+# 4A. GRAFIK UTAMA 1 (TOTAL PER BULAN)
 # ------------------------------------------
-pd_st.subheader("📈 Total RAK vs Realisasi Keseluruhan per Bidang")
-pd_st.markdown("Grafik ini merangkum total anggaran dari seluruh bulan yang dipilih untuk menyoroti **bidang mana yang realisasinya tertinggal**.")
+pd_st.subheader("📈 Total Keseluruhan per Bulan (RAK vs Realisasi)")
+pd_st.markdown("Melihat pergerakan total RAK dan Realisasi dari seluruh bidang yang dipilih setiap bulannya.")
 
 if not df_filtered.empty:
-    # Agregasi data (Total) berdasarkan *Bidang* (bukan bulan lagi)
-    df_agg = df_filtered.groupby("Bidang", sort=False)[["RAK (Rencana)", "Realisasi (Aktual)"]].sum().reset_index()
+    df_agg_bulan = df_filtered.groupby("Bulan", sort=False)[["RAK (Rencana)", "Realisasi (Aktual)"]].sum().reset_index()
     
-    fig_main = go.Figure()
+    fig_bulan = go.Figure()
     
-    # Batang RAK (Biru)
-    fig_main.add_trace(go.Bar(
-        x=df_agg["Bidang"],
-        y=df_agg["RAK (Rencana)"],
-        name="Total RAK (Rencana)",
+    fig_bulan.add_trace(go.Bar(
+        x=df_agg_bulan["Bulan"],
+        y=df_agg_bulan["RAK (Rencana)"],
+        name="Total RAK (Biru)",
         marker_color="#1A73E8",
-        text=[format_short_label(v) for v in df_agg["RAK (Rencana)"]],
+        text=[format_short_label(v) for v in df_agg_bulan["RAK (Rencana)"]],
+        textposition="auto",
+        hovertemplate="Bulan: %{x}<br>Total RAK: Rp %{y:,.0f}<extra></extra>".replace(",", ".")
+    ))
+    
+    fig_bulan.add_trace(go.Bar(
+        x=df_agg_bulan["Bulan"],
+        y=df_agg_bulan["Realisasi (Aktual)"],
+        name="Total Realisasi (Merah)",
+        marker_color="#D93025",
+        text=[format_short_label(v) for v in df_agg_bulan["Realisasi (Aktual)"]],
+        textposition="auto",
+        hovertemplate="Bulan: %{x}<br>Total Realisasi: Rp %{y:,.0f}<extra></extra>".replace(",", ".")
+    ))
+
+    fig_bulan.update_layout(
+        barmode='group',
+        template="plotly_white",
+        legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, font=dict(size=11)),
+        margin=dict(l=10, r=10, t=20, b=80),
+        autosize=True
+    )
+
+    fig_bulan.update_yaxes(tickprefix="Rp ", tickformat=",.0f", separatethousands=True)
+    pd_st.plotly_chart(fig_bulan, use_container_width=True)
+
+# ------------------------------------------
+# 4B. GRAFIK UTAMA 2 (TOTAL PER BIDANG)
+# ------------------------------------------
+pd_st.subheader("📉 Akumulasi Total per Bidang (RAK vs Realisasi)")
+pd_st.markdown("Melihat perbandingan kinerja serapan anggaran antar bidang secara langsung untuk mengetahui **bidang mana yang realisasinya paling tertinggal**.")
+
+if not df_filtered.empty:
+    df_agg_bidang = df_filtered.groupby("Bidang", sort=False)[["RAK (Rencana)", "Realisasi (Aktual)"]].sum().reset_index()
+    
+    fig_bidang = go.Figure()
+    
+    fig_bidang.add_trace(go.Bar(
+        x=df_agg_bidang["Bidang"],
+        y=df_agg_bidang["RAK (Rencana)"],
+        name="Total RAK (Biru)",
+        marker_color="#1A73E8",
+        text=[format_short_label(v) for v in df_agg_bidang["RAK (Rencana)"]],
         textposition="auto",
         hovertemplate="Bidang: %{x}<br>Total RAK: Rp %{y:,.0f}<extra></extra>".replace(",", ".")
     ))
     
-    # Batang Realisasi (Merah)
-    fig_main.add_trace(go.Bar(
-        x=df_agg["Bidang"],
-        y=df_agg["Realisasi (Aktual)"],
-        name="Total Realisasi (Aktual)",
+    fig_bidang.add_trace(go.Bar(
+        x=df_agg_bidang["Bidang"],
+        y=df_agg_bidang["Realisasi (Aktual)"],
+        name="Total Realisasi (Merah)",
         marker_color="#D93025",
-        text=[format_short_label(v) for v in df_agg["Realisasi (Aktual)"]],
+        text=[format_short_label(v) for v in df_agg_bidang["Realisasi (Aktual)"]],
         textposition="auto",
         hovertemplate="Bidang: %{x}<br>Total Realisasi: Rp %{y:,.0f}<extra></extra>".replace(",", ".")
     ))
 
-    fig_main.update_layout(
+    fig_bidang.update_layout(
         barmode='group',
         template="plotly_white",
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.5,  # Diatur lebih turun agar tidak bertabrakan dengan label teks yang panjang
-            xanchor="center",
-            x=0.5,
-            font=dict(size=11)
-        ),
+        legend=dict(orientation="h", yanchor="top", y=-0.5, xanchor="center", x=0.5, font=dict(size=11)),
         margin=dict(l=10, r=10, t=20, b=120),
         autosize=True
     )
 
-    fig_main.update_yaxes(tickprefix="Rp ", tickformat=",.0f", separatethousands=True)
-    pd_st.plotly_chart(fig_main, use_container_width=True)
+    fig_bidang.update_yaxes(tickprefix="Rp ", tickformat=",.0f", separatethousands=True)
+    pd_st.plotly_chart(fig_bidang, use_container_width=True)
 
 # ------------------------------------------
-# 5. GRAFIK DETAIL BULANAN PER BIDANG
+# 5. GRAFIK DETAIL PER BIDANG (BULANAN)
 # ------------------------------------------
-pd_st.subheader("🔍 Tren Bulanan RAK vs Realisasi per Bidang")
+pd_st.subheader("🔍 Detail RAK vs Realisasi per Bidang")
 
 n_cats = len(selected_categories)
 if n_cats > 0:
+    # Filter ulang khusus untuk subplot agar selalu menampilkan urutan bulan dengan rapi
+    df_detail = df_all[df_all["Bidang"].isin(selected_categories)]
+    
     fig = make_subplots(
         rows=n_cats, cols=1, 
         subplot_titles=selected_categories,
-        vertical_spacing=0.04
+        vertical_spacing=0.06
     )
     
     for idx, cat in enumerate(selected_categories, start=1):
-        df_cat = df_all[df_all["Bidang"] == cat]
+        df_cat = df_detail[df_detail["Bidang"] == cat]
         x_vals = df_cat["Bulan"].tolist()
         rak_vals = df_cat["RAK (Rencana)"].tolist()
         lra_vals = df_cat["Realisasi (Aktual)"].tolist()
         rak_strs = df_cat["RAK_Str"].tolist()
         lra_strs = df_cat["Realisasi_Str"].tolist()
         
-        # Batang RAK (Biru)
+        # Batang RAK
         fig.add_trace(
             go.Bar(
                 x=x_vals, y=rak_vals,
@@ -254,7 +281,7 @@ if n_cats > 0:
             row=idx, col=1
         )
         
-        # Batang Realisasi (Merah)
+        # Batang Realisasi
         fig.add_trace(
             go.Bar(
                 x=x_vals, y=lra_vals,
@@ -272,16 +299,10 @@ if n_cats > 0:
 
     fig.update_layout(
         barmode='group', 
-        height=300 * n_cats,
+        height=320 * n_cats,
         template="plotly_white",
         hovermode="closest",
-        legend=dict(
-            orientation="h", 
-            yanchor="bottom", 
-            y=1.02, 
-            xanchor="right", 
-            x=1
-        ),
+        legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="right", x=1),
         margin=dict(l=10, r=10, t=40, b=20)
     )
     
@@ -294,9 +315,10 @@ else:
 # 6. TABEL RANGKUMAN 
 # ------------------------------------------
 with pd_st.expander("📁 Lihat Tabel Rangkuman RAK vs Realisasi"):
-    df_filtered = df_all[df_all["Bidang"].isin(selected_categories)]
-    if not df_filtered.empty:
-        df_pivot = df_filtered.pivot(index="Bidang", columns="Bulan", values=["RAK (Rencana)", "Realisasi (Aktual)"])
+    # Tabel dirangkum menggunakan seluruh bulan (tidak dipotong filter bulan agar tabel utuh)
+    df_tabel = df_all[df_all["Bidang"].isin(selected_categories)]
+    if not df_tabel.empty:
+        df_pivot = df_tabel.pivot(index="Bidang", columns="Bulan", values=["RAK (Rencana)", "Realisasi (Aktual)"])
         
         new_columns = []
         for m in MONTHS_FULL:
@@ -319,4 +341,4 @@ with pd_st.expander("📁 Lihat Tabel Rangkuman RAK vs Realisasi"):
                 
         pd_st.dataframe(df_pivot, use_container_width=True, hide_index=True)
     else:
-        pd_st.warning("Belum ada bidang yang dipilih.")
+        pd_st.warning("Belum ada data untuk ditampilkan di tabel.")
