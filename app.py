@@ -250,7 +250,7 @@ else:
     pd_st.warning("Silakan pilih minimal satu bidang di sidebar.")
 
 # ------------------------------------------
-# 6. TABEL RANGKUMAN (BEBAS DIGESER TANPA ADA KOLOM YANG TERKUNCI)
+# 6. TABEL RANGKUMAN (AMAN TANPA MULTI-INDEX ERROR)
 # ------------------------------------------
 with pd_st.expander("📁 Lihat Tabel Rangkuman RAK vs Realisasi"):
     df_filtered = df_all[df_all["Bidang"].isin(selected_categories)]
@@ -264,7 +264,8 @@ with pd_st.expander("📁 Lihat Tabel Rangkuman RAK vs Realisasi"):
             
         df_pivot = df_pivot[new_columns]
         
-        # MENGHAPUS LOCK INDEKS DENGAN RESET_INDEX()
+        # Flatten MultiIndex columns agar aman dari error pemformatan
+        df_pivot.columns = [f"{col[0]} - {col[1]}" for col in df_pivot.columns]
         df_pivot = df_pivot.reset_index()
         
         def format_accounting(val):
@@ -272,12 +273,10 @@ with pd_st.expander("📁 Lihat Tabel Rangkuman RAK vs Realisasi"):
                 return "-"
             return f"{val:,.0f}".replace(",", ".")
             
-        # Terapkan format hanya pada kolom angka (bukan kolom teks "Bidang")
         for col in df_pivot.columns:
             if col != "Bidang":
                 df_pivot[col] = df_pivot[col].apply(format_accounting)
                 
-        # Tampilkan tabel yang sepenuhnya bebas digeser ke kanan/kiri di HP
         pd_st.dataframe(df_pivot, use_container_width=True, hide_index=True)
     else:
         pd_st.warning("Belum ada bidang yang dipilih.")
