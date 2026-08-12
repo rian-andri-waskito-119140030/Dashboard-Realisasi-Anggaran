@@ -8,12 +8,9 @@ import os
 # Konfigurasi Halaman Website (Wide Mode)
 pd_st.set_page_config(page_title="Dashboard Realisasi Anggaran", layout="wide")
 
-# ==========================================
-# CSS TAMBAHAN AGAR TABEL BISA DI-SCROLL DI HP
-# ==========================================
+# CSS Tambahan untuk Responsif Tabel di HP
 pd_st.markdown("""
     <style>
-    /* Memastikan tabel responsif dan bisa digeser horizontal di layar kecil */
     [data-testid="stDataFrame"] {
         width: 100%;
         overflow-x: auto;
@@ -184,7 +181,7 @@ fig_main.update_yaxes(tickprefix="Rp ", tickformat=",.0f", separatethousands=Tru
 pd_st.plotly_chart(fig_main, use_container_width=True)
 
 # ------------------------------------------
-# 5. GRAFIK DETAIL PER BIDANG (1 KOLOM DI HP)
+# 5. GRAFIK DETAIL PER BIDANG
 # ------------------------------------------
 pd_st.subheader("🔍 RAK vs Realisasi per Bidang")
 pd_st.markdown("🟢 Melebihi | 🟡 Mendekati (80-100%) | 🔴 Di Bawah (<80%)")
@@ -253,7 +250,7 @@ else:
     pd_st.warning("Silakan pilih minimal satu bidang di sidebar.")
 
 # ------------------------------------------
-# 6. TABEL RANGKUMAN (BEBAS DIGESER DI HP)
+# 6. TABEL RANGKUMAN (BEBAS DIGESER TANPA ADA KOLOM YANG TERKUNCI)
 # ------------------------------------------
 with pd_st.expander("📁 Lihat Tabel Rangkuman RAK vs Realisasi"):
     df_filtered = df_all[df_all["Bidang"].isin(selected_categories)]
@@ -267,14 +264,20 @@ with pd_st.expander("📁 Lihat Tabel Rangkuman RAK vs Realisasi"):
             
         df_pivot = df_pivot[new_columns]
         
+        # MENGHAPUS LOCK INDEKS DENGAN RESET_INDEX()
+        df_pivot = df_pivot.reset_index()
+        
         def format_accounting(val):
             if pd.isna(val) or val == 0:
                 return "-"
             return f"{val:,.0f}".replace(",", ".")
             
-        df_display = df_pivot.map(format_accounting)
-        
-        # st.dataframe akan otomatis mendeteksi lebar layar dan membuka fitur scroll horizontal
-        pd_st.dataframe(df_display, use_container_width=True)
+        # Terapkan format hanya pada kolom angka (bukan kolom teks "Bidang")
+        for col in df_pivot.columns:
+            if col != "Bidang":
+                df_pivot[col] = df_pivot[col].apply(format_accounting)
+                
+        # Tampilkan tabel yang sepenuhnya bebas digeser ke kanan/kiri di HP
+        pd_st.dataframe(df_pivot, use_container_width=True, hide_index=True)
     else:
         pd_st.warning("Belum ada bidang yang dipilih.")
