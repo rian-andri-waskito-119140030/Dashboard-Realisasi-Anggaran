@@ -2,7 +2,6 @@ import streamlit as pd_st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import os
 
 # Konfigurasi Halaman Website (Wide Mode)
@@ -232,88 +231,132 @@ else:
     pd_st.warning("Silakan pilih minimal satu bidang di sidebar.")
 
 # ------------------------------------------
-# 5. GRAFIK DETAIL PER BIDANG — GRAFIK BATANG (GRID 3x2)
+# 5. GRAFIK DETAIL PER BIDANG — GRAFIK BATANG (RESPONSIVE: st.columns, auto-stack di HP)
 # ------------------------------------------
 pd_st.subheader("🔍 Perbandingan RAK vs Realisasi per Bidang (Grafik Batang)")
 pd_st.markdown("🔵 **RAK (Rencana)** | 🔴 **Realisasi (Aktual)**")
 
 n_cats = len(selected_categories)
 if n_cats > 0:
-    rows = (n_cats + 1) // 2
-    fig = make_subplots(
-        rows=rows, cols=2, 
-        subplot_titles=selected_categories,
-        vertical_spacing=0.15,
-        horizontal_spacing=0.08
-    )
-    
+    cols_per_row = 2
+    cols = None
+
     for idx, cat in enumerate(selected_categories):
-        r = (idx // 2) + 1
-        c = (idx % 2) + 1
-        
+        # Buat baris kolom baru setiap kelipatan cols_per_row.
+        # Di layar sempit (HP), st.columns otomatis ditumpuk vertikal oleh Streamlit.
+        if idx % cols_per_row == 0:
+            cols = pd_st.columns(cols_per_row)
+
+        target_col = cols[idx % cols_per_row]
+
         df_cat = df_all[df_all["Bidang"] == cat]
         x_vals = df_cat["Bulan"].tolist()
         rak_vals = df_cat["RAK (Rencana)"].tolist()
         lra_vals = df_cat["Realisasi (Aktual)"].tolist()
         rak_strs = df_cat["RAK_Str"].tolist()
         lra_strs = df_cat["Realisasi_Str"].tolist()
-        
+
         rak_short = [format_short(v) for v in rak_vals]
         lra_short = [format_short(v) for v in lra_vals]
 
+        fig_cat = go.Figure()
+
         # 1. Batang RAK (Biru)
-        fig.add_trace(
-            go.Bar(
-                x=x_vals, y=rak_vals,
-                name='RAK (Rencana)',
-                marker_color=RAK_COLOR,
-                legendgroup='rak',
-                showlegend=(idx == 0),
-                customdata=rak_strs,
-                hovertemplate="RAK: %{customdata}<extra></extra>",
-                text=rak_short,
-                textposition="inside",
-                textangle=-90,
-                textfont=dict(size=8, color="white"),
-                insidetextanchor="middle"
-            ),
-            row=r, col=c
-        )
-        
+        fig_cat.add_trace(go.Bar(
+            x=x_vals, y=rak_vals,
+            name='RAK (Rencana)',
+            marker_color=RAK_COLOR,
+            legendgroup='rak',
+            showlegend=(idx == 0),
+            customdata=rak_strs,
+            hovertemplate="RAK: %{customdata}<extra></extra>",
+            text=rak_short,
+            textposition="inside",
+            textangle=-90,
+            textfont=dict(size=8, color="white"),
+            insidetextanchor="middle"
+        ))
+
         # 2. Batang Realisasi (Merah)
-        fig.add_trace(
-            go.Bar(
-                x=x_vals, y=lra_vals,
-                name='Realisasi (Aktual)',
-                marker_color=REALISASI_COLOR,
-                legendgroup='lra',
-                showlegend=(idx == 0),
-                customdata=lra_strs,
-                hovertemplate="Realisasi: %{customdata}<extra></extra>",
-                text=lra_short,
-                textposition="inside",
-                textangle=-90,
-                textfont=dict(size=8, color="white"),
-                insidetextanchor="middle"
-            ),
-            row=r, col=c
+        fig_cat.add_trace(go.Bar(
+            x=x_vals, y=lra_vals,
+            name='Realisasi (Aktual)',
+            marker_color=REALISASI_COLOR,
+            legendgroup='lra',
+            showlegend=(idx == 0),
+            customdata=lra_strs,
+            hovertemplate="Realisasi: %{customdata}<extra></extra>",
+            text=lra_short,
+            textposition="inside",
+            textangle=-90,
+            textfont=dict(size=8, color="white"),
+            insidetextanchor="middle"
+        ))
+
+        fig_cat.update_layout(
+            title=dict(text=cat, font=dict(size=13)),
+            barmode="group",
+            height=350,
+            template="plotly_white",
+            hovermode="closest",
+            margin=dict(l=30, r=20, t=50, b=30),
+            legend=dict(orientation="h", yanchor="bottom", y=1.15, xanchor="right", x=1)
         )
+        fig_cat.update_yaxes(tickprefix="Rp ", tickformat=",.0f", separatethousands=True)
 
-    fig.update_layout(
-        barmode="group",
-        height=350 * rows,
-        template="plotly_white",
-        hovermode="closest",
-        margin=dict(l=40, r=40, t=60, b=40),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    
-    # Format sumbu Y subplots agar menggunakan pemisah ribuan
-    fig.update_yaxes(tickprefix="Rp ", tickformat=",.0f", separatethousands=True)
-
-    pd_st.plotly_chart(fig, use_container_width=True)
+        with target_col:
+            pd_st.plotly_chart(fig_cat, use_container_width=True)
 else:
     pd_st.warning("Silakan pilih minimal satu bidang di sidebar.")
+
+# ------------------------------------------
+# 5b. KETERANGAN / ALASAN REALISASI (DIBANDINGKAN DENGAN RAK BELANJA PER BULAN)
+# ------------------------------------------
+pd_st.markdown("### 📝 Keterangan Realisasi Anggaran")
+
+# Hitung total RAK & Realisasi per bulan (gabungan bidang terpilih) langsung dari data
+# untuk membandingkan rencana (RAK) vs realisasi aktual sebagai dasar penjelasan.
+df_ket = (
+    df_filtered.groupby("Bulan", as_index=False)[["RAK (Rencana)", "Realisasi (Aktual)"]]
+    .sum()
+)
+df_ket["Bulan"] = pd.Categorical(df_ket["Bulan"], categories=MONTHS_FULL, ordered=True)
+df_ket = df_ket.sort_values("Bulan").set_index("Bulan")
+
+def rp(v):
+    return f"Rp {v:,.0f}".replace(",", ".")
+
+rak_jan = df_ket.loc["Januari", "RAK (Rencana)"] if "Januari" in df_ket.index else 0
+real_jan = df_ket.loc["Januari", "Realisasi (Aktual)"] if "Januari" in df_ket.index else 0
+
+# Rata-rata RAK per bulan untuk Februari-Juli (gabungan bidang terpilih), sebagai pembanding
+bulan_feb_jul = [m for m in MONTHS_FULL[1:] if m in df_ket.index]
+if bulan_feb_jul:
+    rak_feb_jul_avg = df_ket.loc[bulan_feb_jul, "RAK (Rencana)"].mean()
+    real_feb_jul_avg = df_ket.loc[bulan_feb_jul, "Realisasi (Aktual)"].mean()
+else:
+    rak_feb_jul_avg = 0
+    real_feb_jul_avg = 0
+
+n_bidang_terpilih = max(len(selected_categories), 1)
+up_gu_total = 60_000_000
+up_gu_per_bidang = up_gu_total / n_bidang_terpilih
+
+pd_st.info(
+    f"**Januari** — Total RAK (rencana) bulan Januari untuk bidang terpilih adalah "
+    f"**{rp(rak_jan)}**, namun realisasi yang tercatat hanya **{rp(real_jan)}** "
+    f"({(real_jan/rak_jan*100 if rak_jan else 0):.0f}% dari RAK). Realisasi ini hanya untuk "
+    "pos gaji, karena Uang Persediaan (UP) baru cair pada bulan Februari, dan SK TPP belum "
+    "terbit karena masih menunggu Bagian Organisasi memplotkan besaran TPP untuk "
+    "masing-masing jabatan.\n\n"
+    f"**Februari–Juli** — Rata-rata RAK per bulan pada periode ini mencapai **{rp(rak_feb_jul_avg)}** "
+    f"(gabungan bidang terpilih), jauh di atas rata-rata realisasi yang hanya **{rp(real_feb_jul_avg)}** "
+    f"per bulan. Ini terjadi karena pencairan UP/GU (Uang Persediaan/Ganti Uang) yang diterima "
+    f"hanya sekitar **{rp(up_gu_total)}**, sehingga alokasi maksimal per bidang hanya sekitar "
+    f"**{rp(up_gu_per_bidang)}** per bulan — jauh lebih kecil dibanding RAK yang direncanakan, "
+    "sehingga realisasi tidak bisa menyamai rencana meskipun kebutuhan riil sudah dianggarkan "
+    "dalam RAK."
+)
 
 # ------------------------------------------
 # 6. TABEL RANGKUMAN (FORMAT AKUNTANSI)
