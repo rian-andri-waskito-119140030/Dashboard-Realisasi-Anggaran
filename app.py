@@ -92,7 +92,7 @@ def load_data():
                 mod = rows['Unnamed: 8'].apply(clean_number).sum()
                 lra_result[cat_name][m] = op + mod
                 
-    # 3. Bentuk Dataframe Panjang + Kolom Format Teks Akuntansi untuk Hover
+    # 3. Bentuk Dataframe Panjang
     records = []
     for cat in CATEGORIES_MAPPING.keys():
         for i, m_file in enumerate(MONTHS_FILE):
@@ -100,7 +100,6 @@ def load_data():
             rak_val = rak_result[cat][m_file]
             lra_val = lra_result[cat][m_file]
             
-            # Format string akuntansi Indonesia (titik sebagai pemisah ribuan)
             rak_str = f"Rp {rak_val:,.0f}".replace(",", ".") if rak_val > 0 else "Rp 0"
             lra_str = f"Rp {lra_val:,.0f}".replace(",", ".") if lra_val > 0 else "Rp 0"
             
@@ -119,13 +118,12 @@ def load_data():
 df_all = load_data()
 
 # ==========================================
-# 3. TAMPILAN DASHBOARD STREAMLIT (LIGHT MODE)
+# 3. TAMPILAN DASHBOARD STREAMLIT (RESPONSIF)
 # ==========================================
-pd_st.title("📊 Dashboard Interaktif Rencana & Realisasi Anggaran")
-pd_st.markdown("Dinas Komunikasi dan Informatika — Pemantauan Kinerja Penyerapan Anggaran")
+pd_st.title("📊 Dashboard Realisasi Anggaran")
+pd_st.markdown("Dinas Komunikasi dan Informatika")
 
 # Sidebar Filter Pilihan Bidang
-pd_st.sidebar.header("Pengaturan Tampilan")
 selected_categories = pd_st.sidebar.multiselect(
     "Pilih Bidang:",
     options=list(CATEGORIES_MAPPING.keys()),
@@ -135,9 +133,9 @@ selected_categories = pd_st.sidebar.multiselect(
 df_filtered = df_all[df_all["Bidang"].isin(selected_categories)]
 
 # ------------------------------------------
-# 4. GRAFIK UTAMA GABUNGAN (FORMAT AKUNTANSI INDONESIA)
+# 4. GRAFIK UTAMA GABUNGAN
 # ------------------------------------------
-pd_st.subheader("📈 Tren Realisasi Aktual per Kategori Bidang (Interaktif)")
+pd_st.subheader("📈 Tren Realisasi Aktual")
 
 fig_main = px.line(
     df_filtered,
@@ -153,50 +151,44 @@ fig_main = px.line(
 fig_main.update_layout(
     template="plotly_white",
     hovermode="closest",
+    # Legenda ditaruh di bawah dengan ukuran font yang aman untuk layar HP
     legend=dict(
         orientation="h",
-        yanchor="bottom",
-        y=-0.4,
+        yanchor="top",
+        y=-0.2,
         xanchor="center",
-        x=0.5
+        x=0.5,
+        font=dict(size=10)
     ),
-    margin=dict(l=40, r=40, t=20, b=100)
+    margin=dict(l=10, r=10, t=20, b=150),
+    autosize=True
 )
 
-# Kustomisasi Tooltip Hover agar menampilkan format akuntansi dengan titik
 fig_main.update_traces(
     hovertemplate="<b>%{customdata[1]}</b><br>Bulan: %{customdata[2]}<br>Realisasi: %{customdata[0]}<extra></extra>"
 )
 
-# Format Sumbu Y agar menampilkan angka jutaan/miliar yang bersih (menggunakan tickformat)
-fig_main.update_yaxes(
-    tickprefix="Rp ", 
-    tickformat=",.0f",
-    separatethousands=True
-)
+fig_main.update_yaxes(tickprefix="Rp ", tickformat=",.0f", separatethousands=True)
 
+# use_container_width=True membuat grafik otomatis menyesuaikan lebar layar HP / Laptop
 pd_st.plotly_chart(fig_main, use_container_width=True)
 
 # ------------------------------------------
-# 5. GRAFIK DETAIL PER BIDANG (GRID 3x2)
+# 5. GRAFIK DETAIL PER BIDANG (RESPONSIF 1 KOLOM DI HP)
 # ------------------------------------------
-pd_st.subheader("🔍 Perbandingan RAK vs Realisasi per Bidang (Indikator Kinerja)")
-pd_st.markdown("🟢 **Melebihi RAK** | 🟡 **Mendekati RAK (80%-100%)** | 🔴 **Di Bawah RAK (<80%)**")
+pd_st.subheader("🔍 RAK vs Realisasi per Bidang")
+pd_st.markdown("🟢 Melebihi | 🟡 Mendekati (80-100%) | 🔴 Di Bawah (<80%)")
 
 n_cats = len(selected_categories)
 if n_cats > 0:
-    rows = (n_cats + 1) // 2
+    # Menggunakan 1 kolom penuh agar di HP tidak berhimpit/terpotong
     fig = make_subplots(
-        rows=rows, cols=2, 
+        rows=n_cats, cols=1, 
         subplot_titles=selected_categories,
-        vertical_spacing=0.15,
-        horizontal_spacing=0.08
+        vertical_spacing=0.08
     )
     
-    for idx, cat in enumerate(selected_categories):
-        r = (idx // 2) + 1
-        c = (idx % 2) + 1
-        
+    for idx, cat in enumerate(selected_categories, start=1):
         df_cat = df_all[df_all["Bidang"] == cat]
         x_vals = df_cat["Bulan"].tolist()
         rak_vals = df_cat["RAK (Rencana)"].tolist()
@@ -204,66 +196,61 @@ if n_cats > 0:
         rak_strs = df_cat["RAK_Str"].tolist()
         lra_strs = df_cat["Realisasi_Str"].tolist()
         
-        # 1. Plot RAK
+        # Plot RAK
         fig.add_trace(
             go.Scatter(
                 x=x_vals, y=rak_vals,
                 mode='lines+markers',
-                name='RAK (Rencana)',
-                line=dict(color='#1A73E8', width=2.5),
-                marker=dict(size=6),
+                name='RAK',
+                line=dict(color='#1A73E8', width=2),
+                marker=dict(size=5),
                 legendgroup='rak',
-                showlegend=(idx == 0),
+                showlegend=(idx == 1),
                 customdata=rak_strs,
                 hovertemplate="RAK: %{customdata}<extra></extra>"
             ),
-            row=r, col=c
+            row=idx, col=1
         )
         
-        # 2. Plot Realisasi dengan Warna Kondisional
+        # Plot Realisasi
         colors = []
         for r_val, l_val in zip(rak_vals, lra_vals):
-            if l_val > r_val:
-                colors.append('#188038') # Hijau
-            elif l_val >= 0.8 * r_val:
-                colors.append('#F9AB00') # Kuning
-            else:
-                colors.append('#D93025') # Merah
+            if l_val > r_val: colors.append('#188038')
+            elif l_val >= 0.8 * r_val: colors.append('#F9AB00')
+            else: colors.append('#D93025')
                 
         fig.add_trace(
             go.Scatter(
                 x=x_vals, y=lra_vals,
                 mode='lines+markers',
-                name='Realisasi (Aktual)',
-                line=dict(color='#BDC1C6', width=2),
-                marker=dict(size=8, color=colors),
+                name='Realisasi',
+                line=dict(color='#BDC1C6', width=1.5),
+                marker=dict(size=7, color=colors),
                 legendgroup='lra',
-                showlegend=(idx == 0),
+                showlegend=(idx == 1),
                 customdata=lra_strs,
                 hovertemplate="Realisasi: %{customdata}<extra></extra>"
             ),
-            row=r, col=c
+            row=idx, col=1
         )
 
     fig.update_layout(
-        height=350 * rows,
+        height=250 * n_cats, # Tinggi menyesuaikan jumlah bidang
         template="plotly_white",
         hovermode="closest",
-        margin=dict(l=40, r=40, t=60, b=40),
+        margin=dict(l=10, r=10, t=30, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     
-    # Format sumbu Y subplots agar menggunakan pemisah ribuan
     fig.update_yaxes(tickprefix="Rp ", tickformat=",.0f", separatethousands=True)
-
     pd_st.plotly_chart(fig, use_container_width=True)
 else:
     pd_st.warning("Silakan pilih minimal satu bidang di sidebar.")
 
 # ------------------------------------------
-# 6. TABEL RANGKUMAN (FORMAT AKUNTANSI)
+# 6. TABEL RANGKUMAN (BISA DIGESER / SCROLL DI HP)
 # ------------------------------------------
-with pd_st.expander("📁 Lihat Data Tabel Rangkuman (Format Per Bulan: RAK vs Realisasi)"):
+with pd_st.expander("📁 Lihat Tabel Rangkuman RAK vs Realisasi"):
     df_filtered = df_all[df_all["Bidang"].isin(selected_categories)]
     if not df_filtered.empty:
         df_pivot = df_filtered.pivot(index="Bidang", columns="Bulan", values=["RAK (Rencana)", "Realisasi (Aktual)"])
@@ -281,6 +268,8 @@ with pd_st.expander("📁 Lihat Data Tabel Rangkuman (Format Per Bulan: RAK vs R
             return f"{val:,.0f}".replace(",", ".")
             
         df_display = df_pivot.map(format_accounting)
-        pd_st.dataframe(df_display, use_container_width=True)
+        
+        # Menggunakan st.dataframe tanpa hide/lock berlebihan agar komponen scroll bawaan HP aktif secara leluasa
+        pd_st.dataframe(df_display, use_container_width=True, height=300)
     else:
         pd_st.warning("Belum ada bidang yang dipilih.")
